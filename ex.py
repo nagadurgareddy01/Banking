@@ -1,136 +1,166 @@
-from abc import ABC , abstractmethod
 import os
-import csv 
-import datetime
+import csv
+import re
+from datetime import datetime
+from abc import ABC, abstractmethod
 
-user_data='user.csv'
-Transction_data='transaction.csv'
+USERS_FILE = "users.csv"
+TRANSACTIONS_FILE = "transactions.csv"
 
 class Bank(ABC):
-    def __init__(self,username,password):
+    def __init__(self, username, password):
         self.username = username
         self.password = password
         
     @abstractmethod
-    def deposit(self,amount):
+    def deposit(self, amount):
         pass
+        
     @abstractmethod
-    def withdraw(self,amount):
+    def withdraw(self, amount):
         pass
     
 class Transactions(Bank):
-    def __init__(self, username, password):
+    def __init__(self, username, password, initial_balance=0.0):
         super().__init__(username, password)
-        self.__balance = 0
-    def get_balance(self):
-        return self.__balance
-    def transaction_data(self,trans_type,amount):
-        file_exists=os.path.exists(Transction_data)
-        with open(Transction_data,'a') as f:
-            writer=csv.writer(f)
+        self.balance = initial_balance
+        
+    def log_transaction(self, trans_type, amount):
+        file_exists = os.path.exists(TRANSACTIONS_FILE)
+        with open(TRANSACTIONS_FILE, mode='a', newline='') as file:
+            writer = csv.writer(file)
             if not file_exists:
-                writer.writerow(['date&time','username','Transaction_type','amount','Balance'])
-            date_time=datetime.datetime.now()
-            writer.writerow([date_time,self.username,trans_type,amount,self.__balance])
-    def deposit(self,amount):
-        if amount > 0 :
-            self.__balance += amount
-            self.transaction_data('Deposit',amount)
-            print(f'your amount {amount} is deposited ')
+                writer.writerow(["Timeduration", "Username", "Type", "Amount", "Remaining Balance"])
+            
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            writer.writerow([timestamp, self.username, trans_type, amount, self.balance])
+
+    def deposit(self, amount):
+        if amount > 0:
+            self.balance += amount
+            print(f'Your amount {amount} is deposited.')
+            self.log_transaction("Deposit", amount)
+            return True
         else:
-            print('please enter amount above 0')
+            print('Please enter an amount above 0.')
+            return False
+            
     def withdraw(self, amount):
-        if amount >= self.__balance:
-            print('please enter lesser amount')
-        elif amount <=0:
-            print('please enter more than 0')
+        if amount > self.balance:
+            print('Please enter a lesser amount.')
+            return False
+        elif amount <= 0:
+            print('Please enter more than 0.')
+            return False
         else:
-            self.__balance -= amount
-            print(f'you withdraw {amount} success and balance is {self.__balance}')
-            self.transaction_data('Withdraw',self.__balance)
+            self.balance -= amount
+            print(f'You withdrew {amount} successfully. Balance is {self.balance}.')
+            self.log_transaction("Withdrawal", amount)
+            return True
+            
     def checkbalance(self):
-        print(f'the total balance is {self.__balance}')
+        print(f'The total balance is {self.balance}')
 
-class Account():
-    
+class Account:
     def __init__(self):
-        self.accounts={}
-    def log_login(self,username,password,login_type):
-        file_exists=os.path.exists(user_data)
-        with open(user_data,'a') as f:
-            writer=csv.writer(f)
-            if not file_exists:
-                writer.writerow(['datetime','username','password','login_type'])
-            date_time=datetime.datetime.now()
-            writer.writerow([date_time,username,password,login_type])
+        self.accounts = {}
+        self.load_data()  
+        
+    def load_data(self):
+        """Reads user credentials and balances from users.csv"""
+        if not os.path.exists(USERS_FILE):
+            return
+            
+        with open(USERS_FILE, mode='r') as file:
+            reader = csv.reader(file)
+            next(reader, None)             
+            for row in reader:
+                if row:
+                    username, password, balance = row
+                    
+                    self.accounts[username] = Transactions(username, password, float(balance))
+    def check_password(self, password):
 
+        password_pattern = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,16}$"
+        return re.match(password_pattern, password)
+    
+
+    def save_all_users(self):
+        """Overwrites users.csv with the most up-to-date program state"""
+        with open(USERS_FILE, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["Username", "Password", "Current Balance"])
+            for username, account in self.accounts.items():
+                writer.writerow([account.username, account.password, account.balance])
 
     def signup(self):
-        print('welcome to sign up :')
-        username = input('please enter your user name : ')
-        if username in self.accounts :
-            print(f'username {username} already exists please sign in ')
+        print('Welcome to sign up:')
+        username = input('Please enter your username: ')
+        if username in self.accounts:
+            print(f'Username {username} already exists, please sign in.')
             return None
 
-        password = input('please enter your password : ')
-        new_account = Transactions(username,password)
-        self.accounts[username]=new_account
+        password = input('Please enter your password: ')
+        if not self.check_password(password):
+            print('please enter valid password like \n conatins atleast one small alphabet and one large alphabet and one number \n minumum 8 characters and maximum of 16 characters')
+            return 
+        new_account = Transactions(username, password)
+        self.accounts[username] = new_account
         
-        self.log_login(username,password,'sign_up')
-      
-        print(f'Account created successfully welcome {username}')
+        
+        self.save_all_users()
+        print(f'Account created successfully. Welcome, {username}!')
 
     def signin(self):
-        print('welcome to sign in')
-        username = input('enter your username : ')
-        if username not in self.accounts :
-            print('username doesn\'t exits please sign up')
+        print('Welcome to sign in')
+        username = input('Enter your username: ')
+        if username not in self.accounts:
+            print("Username doesn't exist, please sign up.")
             return None
-        password = input('enter your password : ')
+            
+        password = input('Enter your password: ')
         account = self.accounts[username]
         if account.password != password:
-            print('wrong password please sign in again ')
+            print('Wrong password, please sign in again.')
             return None
-        print(f'login successfull {username}')
-        self.log_login(username,password,'sign_in')
+            
+        print(f'Login successful! {username}')
         return account
     
 
-def AccountMenu(account):
+def AccountMenu(account, bank_system):
     while True:
         print(f"\n====== ACCOUNT MENU ({account.username}) ======")
         print("1. Deposit Money")
         print("2. Withdraw Money")
         print("3. Check Balance")
         print("4. Logout")
-        choice = input('choose your option ')
+        choice = input('Choose your option: ')
 
         if choice == '1':
-            try :
-                amount = float(input('enter money for deposit : '))
-                account.deposit(amount)
-            except ValueError:
-                print('enter proper amount')
+            amount = float(input('Enter money for deposit: '))
+            if account.deposit(amount):
+                bank_system.save_all_users() 
             
         elif choice == '2':
-            try:
-                amount = float(input('enter money for withdraw : '))
-                account.withdraw(amount)
-            except ValueError:
-                print('enter proper value')
+            amount = float(input('Enter money for withdraw: '))
+            if account.withdraw(amount):
+                bank_system.save_all_users() 
+            
         elif choice == '3':
             account.checkbalance()
+            
         elif choice == '4':
-            print('logout successfully , bye')
+            print('Logged out successfully. Bye!')
             break 
-        else :
-            print('please select proper choice')
+        else:
+            print('Please select a proper choice.')
 
 def main():
-    print('* '*40)
-    print('welcome to bank of python ')
-    print('- '*40)
-    my_bank=Account()
+    print('* ' * 40)
+    print('Welcome to Bank of Python')
+    print('- ' * 40)
+    my_bank = Account()
 
     while True:
         print("\n====== MAIN MENU ======")
@@ -143,33 +173,15 @@ def main():
 
         if choice == '1':
             my_bank.signup()
-
         elif choice == "2":
             account = my_bank.signin()
             if account:              
-                AccountMenu(account) 
-
+                AccountMenu(account, my_bank) 
         elif choice == "3":
-            print("\n Thank you for using Python Bank. Goodbye!")
+            print("\nThank you for using Python Bank. Goodbye!")
             break
-
         else:
             print("Invalid choice! Please enter 1, 2, or 3.")
 
-            
 
 main()
-
-        
-
-            
-
-
-    
-
-
-
-
-
-
-        
